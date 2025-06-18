@@ -1,0 +1,181 @@
+*{
+  margin: 0;
+  padding: 0;
+}
+.pdf-container {
+  max-width: 800px;
+  margin: 0 auto;
+  height: calc(100vh - 4rem);
+  padding: 2rem;
+  font-family: 'Segoe UI', sans-serif;
+  text-align: center;
+  background-color: #f9fafb;
+  color: #333;
+  overflow-y: auto;
+  position:relative;
+}
+
+.loader-cont {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1000;
+  background-color: rgba(255, 255, 255, 0.5);
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.title {
+  font-size: 2.5rem;
+  font-weight: bold;
+}
+
+.subtitle {
+  margin-top: 0.5rem;
+  font-size: 1rem;
+  color: #555;
+}
+
+.upload-box {
+  margin-top: 2rem;
+  border: 2px dashed #ccc;
+  padding: 2rem;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.upload-area {
+  display: block;
+  width: 100%;
+  cursor: pointer;
+}
+
+.upload-text {
+  font-size: 1rem;
+  color: #555;
+}
+
+.uploaded-section {
+  text-align: left;
+  margin-top: 2rem;
+  padding: 10px;
+}
+
+.file-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: white;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+  margin-bottom: 1rem;
+}
+
+.file-icon {
+  font-size: 1.5rem;
+}
+
+.file-info {
+  flex: 1;
+  margin: 0 1rem;
+}
+
+.file-info input {
+  width: 100%;
+  padding: 0.5rem;
+  margin-top: 0.3rem;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+}
+
+.delete-btn {
+  background: transparent;
+  border: none;
+  font-size: 1.2rem;
+  padding-left: 10px;
+  cursor: pointer;
+}
+
+.actions {
+  margin-top: 2rem;
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.add-more-btn,
+.generate-btn {
+  padding: 0.75rem 1.5rem;
+  margin-top: 1rem;
+  font-size: 1rem;
+  border-radius: 5px;
+  border: none;
+  cursor: pointer;
+}
+
+.add-more-btn {
+  background-color: #f3f4f6;
+}
+
+.generate-btn {
+  background-color: black;
+  color: white;
+}
+
+.footer {
+  margin-top: 3rem;
+  font-size: 0.9rem;
+  color: #888;
+}
+
+.uploaded-section {
+  margin-top: 2rem;
+  padding: 1.5rem;
+  background-color: #f9f9f9;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.uploaded-section h2 {
+  font-size: 1.5rem;
+  margin-bottom: 1rem;
+  color: #333;
+  font-weight: 600;
+}
+
+.signature-upload-wrapper {
+  display: flex;
+  gap: 2rem;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+.signature-block {
+  flex: 1;
+  min-width: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  background-color: #ffffff;
+  padding: 1rem;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+}
+
+.signature-block p {
+  margin: 0;
+  font-weight: 500;
+  color: #555;
+}
+
+.signature-input {
+  padding: 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  background-color: #fdfdfd;
+  cursor: pointer;
+}
