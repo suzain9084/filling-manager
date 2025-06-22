@@ -7,27 +7,28 @@ import CircularProgress, {
 } from '@mui/material/CircularProgress';
 import MergePDF from '../service/merge_pdf_service';
 import AddpageNumberService from '../service/finalMergePDF';
+import { darkScrollbar } from '@mui/material';
 
 
 function App() {
   const [index, setindex] = useState([])
   const [firstfiles, setfirstFiles] = useState([]);
   const [annexurefiles, setannexureFiles] = useState([]);
+  const [application, setapplication] = useState([])
   const [vakalatnamafiles, setvakalatnamaFiles] = useState([]);
+  const [proofService, setproofService] = useState([])
+  const [courtFee, setcourtFee] = useState([])
+  
   const [advocateSig, setadvocateSig] = useState(null)
   const [clientSig, setclientSig] = useState(null)
-  const [application, setapplication] = useState([])
-  const [submitting, setSubmiting] = useState(false)
-
   const currSection = useRef(-1)
+  
+  const IndexLen = useRef(0)
   const particulars = useRef([])
   const bookMarks = useRef([])
   const indexMap = useRef({})
-  const firstSectionBlob = useRef(null)
-  const annexureBlob = useRef(null)
-  const lastBlob = useRef(null)
-  const indexBlob = useRef(null)
-  const IndexLen = useRef(0)
+
+  const blobArrayRef = useRef([])
 
   const base64ToBlob = (base64, mimeType = 'application/pdf') => {
     const byteCharacters = atob(base64);
@@ -76,35 +77,16 @@ function App() {
     } else if (currSection.current == 2) {
       setannexureFiles((prev) => [...prev, ...newFiles])
     } else if (currSection.current == 3) {
-      setvakalatnamaFiles((prev) => [...prev, ...newFiles])
-    } else {
       setapplication((prev) => [...prev, ...newFiles])
+    } else if (currSection.current == 4) {
+      setvakalatnamaFiles((prev) => [...prev, ...newFiles])
+    } else if (currSection.current == 5) {
+      setproofService((prev) => [...prev, ...newFiles])
+    } else {
+      setcourtFee((prev) => [...prev, ...newFiles])
     }
   };
 
-  const handleTitleChange = (i, value, section) => {
-    if (section == 0) {
-      const updatedFiles = [...index];
-      updatedFiles[i].title = value;
-      setindex(updatedFiles);
-    } if (section == 1) {
-      const updatedFiles = [...firstfiles];
-      updatedFiles[i].title = value;
-      setfirstFiles(updatedFiles);
-    } else if (section == 2) {
-      const updatedFiles = [...annexurefiles];
-      updatedFiles[i].title = value;
-      setannexureFiles(updatedFiles);
-    } else if (section == 3) {
-      const updatedFiles = [...vakalatnamafiles];
-      updatedFiles[i].title = value;
-      setvakalatnamaFiles(updatedFiles);
-    } else {
-      const updatedFiles = [...application];
-      updatedFiles[i].title = value;
-      setapplication(updatedFiles);
-    }
-  };
 
   const handleDelete = (index, section) => {
     if (section == 0) {
@@ -116,11 +98,17 @@ function App() {
       const updatedFiles = annexurefiles.filter((_, i) => i !== index);
       setannexureFiles(updatedFiles);
     } else if (section == 3) {
-      const updatedFiles = vakalatnamafiles.filter((_, i) => i !== index);
-      setvakalatnamaFiles(updatedFiles);
-    } else {
       const updatedFiles = application.filter((_, i) => i !== index);
-      setapplication(updatedFiles)
+      setapplication(updatedFiles);
+    } else if (section == 4) {
+      const updatedFiles = vakalatnamafiles.filter((_, i) => i !== index);
+      setvakalatnamaFiles(updatedFiles)
+    } else if (section == 5) {
+      const updatedFiles = proofService.filter((_, i) => i !== index);
+      setproofService(updatedFiles)
+    } else {
+      const updatedFiles = courtFee.filter((_, i) => i !== index);
+      setcourtFee(updatedFiles)
     }
   };
 
@@ -158,12 +146,12 @@ function App() {
     return res.ok
   }
 
-  const workonfirstSection = async () => {
+  const workonfirstSection = async (files) => {
     if (!advocateSig || !clientSig) {
       alert("Please upload both signatures before submitting.");
       return;
     }
-    let formdata = getFormData(firstfiles)
+    let formdata = getFormData(files)
     let response = await MergePDF.mergeFirstpdf(formdata)
     if (response.success) {
       let form = new FormData()
@@ -178,7 +166,8 @@ function App() {
 
       if (res.ok) {
         let data = await res.json()
-        firstSectionBlob.current = base64ToBlob(data.pdf)
+        const updated = [...blobArrayRef.current, base64ToBlob(data.pdf)]
+        blobArrayRef.current = updated
         let copyBookMarks = [...bookMarks.current, data.bookmarks]
         bookMarks.current = copyBookMarks
         console.log("Done with first pdf")
@@ -202,29 +191,17 @@ function App() {
         let data = await res.blob()
         let copyBookMarks = [...bookMarks.current, response.bookmark]
         bookMarks.current = copyBookMarks
-        annexureBlob.current = data
+        const updated = [...blobArrayRef.current, data]
+        blobArrayRef.current = updated
         console.log("Done with Annexure")
       }
     }
   }
 
-  const handleFinalFiles = async () => {
-    let i = 0
-    let formdata = new FormData()
-    application.forEach((e) => {
-      formdata.append(`doc-${i}`, e.file)
-      formdata.append(`title-${i}`, e.title)
-      i++
-    })
-
-    vakalatnamafiles.forEach((e) => {
-      formdata.append(`doc-${i}`, e.file)
-      formdata.append(`title-${i}`, e.title)
-      i++
-    })
-    formdata.append("docCount", i)
-
-    let response = await MergePDF.mergeLastDoc(formdata, particulars.current)
+  const handleFinalFiles = async (files,title) => {
+    console.log(files)
+    let formdata = getFormData(files)
+    let response = await MergePDF.mergeLastDoc(formdata, title)
     if (response.success) {
       let form = new FormData()
       form.append("pdf", new Blob([response.pdf], { type: "application/pdf" }));
@@ -236,48 +213,79 @@ function App() {
       })
       if (res.ok) {
         let data = await res.blob()
-        lastBlob.current = data
+        blobArrayRef.current = [...blobArrayRef.current,data]
         let copyBookMarks = [...bookMarks.current, response.bookmark]
         bookMarks.current = copyBookMarks
-        console.log(bookMarks.current)
         console.log("Done with last Doc");
-
       }
     }
   }
 
-  const makeParallelProcessing = async () => {
-    await workonfirstSection()
-    await handleAnnexures()
-    await handleFinalFiles()
-  }
+  // const makeParallelProcessing = async () => {
+  //   await workonfirstSection()
+  //   await handleAnnexures()
+  //   await handleFinalFiles()
+  // }
 
   const addPageNumberInIndex = async () => {
     let formdata = new FormData()
     formdata.append("pdf", index[0].file)
     formdata.append("index_map", JSON.stringify(indexMap.current))
+    formdata.append('advocate-sig',advocateSig)
     let res = await fetch("http://127.0.0.1:5000/handleFinalIndexPDF", {
       method: 'POST',
       body: formdata
     })
     if (res.ok) {
       console.log("done with index page no")
-      indexBlob.current = await res.blob()
+      const data = await res.blob()
+      blobArrayRef.current = [data, ...blobArrayRef.current]
     }
   }
 
   const handleSubmitFile = async () => {
     let res = await getTitlesFromIndex()
     if (res) {
-      await makeParallelProcessing()
+      let temp = []
+      let i = 0
+      while (i < particulars.current.length && particulars.current[i].toLowerCase().search(/annexure/) === -1) {
+        if (particulars.current[i].toLowerCase().search(/court fee/) !== -1) {
+          if (temp.length !== 0) {
+            await workonfirstSection(temp)
+          }
+          await handleFinalFiles(courtFee,particulars.current[i])
+          temp = []
+        } else if (particulars.current[i].toLowerCase().search(/application under/) !== -1){
+            await handleFinalFiles(application,particulars.current[i])
+        } else {
+          if ( i < firstfiles.length){
+            temp.push(firstfiles[i])
+          }
+        }
+        i++;
+      }
+      if (temp.length != 0) {
+        await workonfirstSection(temp)
+      }
+      await handleAnnexures()
+      i = particulars.current.length - 1
+      while (i >= 0 && particulars.current[i].toLowerCase().search(/annexure/) === -1){
+        i--;
+      }
+      while (i < particulars.current.length){
+        if (particulars.current[i].toLowerCase().search(/application under/) !== -1) {
+          await handleFinalFiles(application,particulars.current[i])
+        } else if (particulars.current[i].toLowerCase().search(/vakalatnama/) !== -1){
+          await handleFinalFiles(vakalatnamafiles,particulars.current[i])
+        } else if (particulars.current[i].toLowerCase().search(/proof of service/) !== -1){
+          await handleFinalFiles(proofService,particulars.current[i])
+        }
+        i++;
+      }
       makeBookMarkForWholeDocument()
       await addPageNumberInIndex()
-      let response = await AddpageNumberService.addPageNoTitle([
-        indexBlob.current,
-        firstSectionBlob.current,
-        annexureBlob.current,
-        lastBlob.current
-      ])
+      console.log(blobArrayRef.current)
+      let response = await AddpageNumberService.addPageNoTitle(blobArrayRef.current)
       if (response.success) {
         let formdata = new FormData()
         formdata.append("pdf", new Blob([response.pdf], { type: 'application/pdf' }))
@@ -319,23 +327,16 @@ function App() {
             <div className="file-icon"><DocumentScannerIcon /></div>
             <div className="file-info">
               <strong>{fileData.file.name}</strong>
-              <input
-                type="text"
-                placeholder="Annexure Title/Heading"
-                value={fileData.title}
-                onChange={(e) => handleTitleChange(index, e.target.value, 0)}
-              />
             </div>
             <div className="delete-btn" onClick={() => handleDelete(index, 0)}><DeleteForeverIcon /></div>
           </div>
         ))}
+        {index.length == 0 && <div className="actions">
+          <button className="add-more-btn" onClick={() => { currSection.current = 0; document.querySelector('input[type="file"]').click() }} >
+            + Add Index
+          </button>
+        </div>}
       </div>
-
-      {index.length == 0 && <div className="actions">
-        <button className="add-more-btn" onClick={() => { currSection.current = 0; document.querySelector('input[type="file"]').click() }} disabled={submitting}>
-          + Add Index
-        </button>
-      </div>}
 
       <div className="uploaded-section">
         <h2>Upload First Files</h2>
@@ -344,23 +345,18 @@ function App() {
             <div className="file-icon"><DocumentScannerIcon /></div>
             <div className="file-info">
               <strong>{fileData.file.name}</strong>
-              <input
-                type="text"
-                placeholder="Annexure Title/Heading"
-                value={fileData.title}
-                onChange={(e) => handleTitleChange(index, e.target.value, 1)}
-              />
             </div>
             <div className="delete-btn" onClick={() => handleDelete(index, 1)}><DeleteForeverIcon /></div>
           </div>
         ))}
+        <div className="actions">
+          <button className="add-more-btn" onClick={() => { currSection.current = 1; document.querySelector('input[type="file"]').click() }} >
+            + Add More Files
+          </button>
+        </div>
       </div>
 
-      <div className="actions">
-        <button className="add-more-btn" onClick={() => { currSection.current = 1; document.querySelector('input[type="file"]').click() }} disabled={submitting}>
-          + Add More Files
-        </button>
-      </div>
+
 
 
       <div className="uploaded-section">
@@ -370,23 +366,18 @@ function App() {
             <div className="file-icon"><DocumentScannerIcon /></div>
             <div className="file-info">
               <strong>{fileData.file.name}</strong>
-              <input
-                type="text"
-                placeholder="Annexure Title/Heading"
-                value={fileData.title}
-                onChange={(e) => handleTitleChange(index, e.target.value, 2)}
-              />
             </div>
             <div className="delete-btn" onClick={() => handleDelete(index, 2)}><DeleteForeverIcon /></div>
           </div>
         ))}
+        <div className="actions">
+          <button className="add-more-btn" onClick={() => { currSection.current = 2; document.querySelector('input[type="file"]').click() }}>
+            + Add More Files
+          </button>
+        </div>
       </div>
 
-      <div className="actions">
-        <button className="add-more-btn" onClick={() => { currSection.current = 2; document.querySelector('input[type="file"]').click() }} disabled={submitting}>
-          + Add More Files
-        </button>
-      </div>
+
 
       <div className="uploaded-section">
         <h2>Upload Application</h2>
@@ -395,71 +386,97 @@ function App() {
             <div className="file-icon"><DocumentScannerIcon /></div>
             <div className="file-info">
               <strong>{fileData.file.name}</strong>
-              <input
-                type="text"
-                placeholder="Annexure Title/Heading"
-                value={fileData.title}
-                onChange={(e) => handleTitleChange(index, e.target.value, 5)}
-              />
             </div>
-            <div className="delete-btn" onClick={() => handleDelete(index, 5)}><DeleteForeverIcon /></div>
+            <div className="delete-btn" onClick={() => handleDelete(index, 3)}><DeleteForeverIcon /></div>
           </div>
         ))}
+        {application.length == 0 && <div className="actions">
+          <button className="add-more-btn" onClick={() => { currSection.current = 3; document.querySelector('input[type="file"]').click() }}>
+            + Add Applcation
+          </button>
+        </div>}
       </div>
 
-      {application.length == 0 && <div className="actions">
-        <button className="add-more-btn" onClick={() => { currSection.current = 5; document.querySelector('input[type="file"]').click() }} disabled={submitting}>
-          + Add Applcation
-        </button>
-      </div>}
+
 
       <div className="uploaded-section">
-        <h2>Uploaded vakalatnama & Proof of Service</h2>
+        <h2>Uploaded vakalatnama</h2>
         {vakalatnamafiles.map((fileData, index) => (
           <div className="file-card" key={index}>
             <div className="file-icon"><DocumentScannerIcon /></div>
             <div className="file-info">
               <strong>{fileData.file.name}</strong>
-              <input
-                type="text"
-                placeholder="Annexure Title/Heading"
-                value={fileData.title}
-                onChange={(e) => handleTitleChange(index, e.target.value, 3)}
-              />
             </div>
-            <div className="delete-btn" onClick={() => handleDelete(index, 3)}><DeleteForeverIcon /></div>
+            <div className="delete-btn" onClick={() => handleDelete(index, 4)}><DeleteForeverIcon /></div>
           </div>
         ))}
+        <div className="actions">
+          {vakalatnamafiles.length == 0 && <button className="add-more-btn" onClick={() => { currSection.current = 4; document.querySelector('input[type="file"]').click() }}>
+            + Add More Files
+          </button>}
+        </div>
       </div>
 
-      <div className="actions">
-        <button className="add-more-btn" onClick={() => { currSection.current = 3; document.querySelector('input[type="file"]').click() }} disabled={submitting}>
-          + Add More Files
-        </button>
+      <div className="uploaded-section">
+        <h2>Uploaded Proof of Service</h2>
+        {proofService.map((fileData, index) => (
+          <div className="file-card" key={index}>
+            <div className="file-icon"><DocumentScannerIcon /></div>
+            <div className="file-info">
+              <strong>{fileData.file.name}</strong>
+            </div>
+            <div className="delete-btn" onClick={() => handleDelete(index, 5)}><DeleteForeverIcon /></div>
+          </div>
+        ))}
+        <div className="actions">
+          {proofService.length == 0 && <button className="add-more-btn" onClick={() => { currSection.current = 5; document.querySelector('input[type="file"]').click() }} >
+            + Add More Files
+          </button>}
+        </div>
       </div>
+
+      <div className="uploaded-section">
+        <h2>Uploaded Court Fee Receipt</h2>
+        {courtFee.map((fileData, index) => (
+          <div className="file-card" key={index}>
+            <div className="file-icon"><DocumentScannerIcon /></div>
+            <div className="file-info">
+              <strong>{fileData.file.name}</strong>
+            </div>
+            <div className="delete-btn" onClick={() => handleDelete(index, 6)}><DeleteForeverIcon /></div>
+          </div>
+        ))}
+        <div className="actions">
+          {courtFee.length == 0 && <button className="add-more-btn" onClick={() => { currSection.current = 6; document.querySelector('input[type="file"]').click() }}>
+            + Add More Files
+          </button>}
+        </div>
+      </div>
+
+
 
       <div className="uploaded-section">
         <h2>Uploaded Signature</h2>
         <div className="signature-upload-wrapper">
           <div className="signature-block">
             <p>Upload Advocate Signature</p>
-            <input type="file" id="advocate" className="signature-input" file={advocateSig || ''} onChange={(e) => { handleSignature(e, 0) }} />
+            <input type="file" id="advocate" accept='png jpg' className="signature-input" file={advocateSig || ''} onChange={(e) => { handleSignature(e, 0) }} />
           </div>
           <div className="signature-block">
             <p>Upload Client Signature</p>
-            <input type="file" id="client" className="signature-input" file={clientSig || ''} onChange={(e) => { handleSignature(e, 1) }} />
+            <input type="file" id="client" accept='png jpg' className="signature-input" file={clientSig || ''} onChange={(e) => { handleSignature(e, 1) }} />
           </div>
         </div>
       </div>
 
       <div className="actions">
-        <button className="generate-btn" onClick={handleSubmitFile} disabled={submitting}>
+        <button className="generate-btn" onClick={handleSubmitFile}>
           Generate Final PDF
         </button>
       </div>
 
       <footer className="footer">© 2025 PDF Annexure Manager. All rights reserved.</footer>
-      {submitting && (
+      {/* {submitting && (
         <div className='loader-cont'>
           <div>
             <CircularProgress
@@ -482,7 +499,7 @@ function App() {
             />
           </div>
         </div>
-      )}
+      )} */}
     </div>
   )
 }
