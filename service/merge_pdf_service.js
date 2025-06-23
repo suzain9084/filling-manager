@@ -101,7 +101,7 @@ class MergePDF {
             j++
             copiedPages.forEach((page,pageIndex) => {
                 if (pageIndex == 0) {
-                    const { width, height } = page.getSize()
+                    const { height } = page.getSize()
                     
                     page.drawText(`ANNEXURE P-${i + 1}`, {
                         x: 10,
@@ -123,33 +123,25 @@ class MergePDF {
         return { success: true, pdf: pdfBytes, bookmark }
     }
 
-    static async mergeLastDoc(formdata,titles) {
-        const docCount = Number.parseInt(formdata.get('docCount'))
+    static async mergeLastDoc(formdata,title) {
         const mergeDoc = await PDFDocument.create()
         let bookmark = []
-        let j = titles.length - 1
         let current = 1
-        while (!titles[j].includes("ANNEXURE")){
-            j--
-        }
-        j++
-        for (let i = 0; i < docCount; i++) {
-            const file = formdata.get(`doc-${i}`)
+        const file = formdata.get(`doc-${0}`)
 
-            const fileBuffer = await file.arrayBuffer()
-            const loadedPdf = await PDFDocument.load(fileBuffer)
-            const copiedPages = await mergeDoc.copyPages(loadedPdf, loadedPdf.getPageIndices())
-            bookmark.push({
-                page: current,
-                title: titles[j]
-            })
+        const fileBuffer = await file.arrayBuffer()
+        const loadedPdf = await PDFDocument.load(fileBuffer)
+        const copiedPages = await mergeDoc.copyPages(loadedPdf, loadedPdf.getPageIndices())
+        bookmark.push({
+            page: current,
+            title: title
+        })
 
-            j++
-            copiedPages.forEach((page) => {
-                mergeDoc.addPage(page)
-                current++
-            })
-        }
+        copiedPages.forEach((page) => {
+            mergeDoc.addPage(page)
+            current++
+        })
+
         bookmark.push({
             page: current - 1,
             title: "last"

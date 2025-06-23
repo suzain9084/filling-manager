@@ -13,6 +13,7 @@ from flask import jsonify
 from gemini_api import GeminiAPI
 import ast
 from reportlab.pdfgen import canvas
+import ast
 import base64
 
 
@@ -32,6 +33,43 @@ def is_this_page(text, keyword):
             mismatch += 1
         n += 1
     return mismatch / n <= 0.2
+
+def isTitleMatched(line,title):
+    words = line.split(" ")
+    error = 0
+    for i in range(len(words)):
+        if words[i] not in title:
+            error += 1
+    return error/len(words) <= 0.2
+
+
+def extractTopValueFromOCRData(filter_data, titles):
+    topMap = {}
+
+    data_text = filter_data['text']
+    data_top = filter_data['top']
+
+    # Common short words to ignore
+    stop_words = {"is", "of", "the", "and", "a", "an", "in", "on", "at", "to", "for", "by", "with", "as", "from"}
+
+    for title in titles:
+        words = title.split(" ")
+        topvalue = 0
+        n = 0
+
+        for word in words:
+            if len(word) > 3 and word.lower() not in stop_words and word in data_text:
+                idx = data_text.index(word)
+                if idx != -1:
+                    topvalue += data_top[idx]
+                    n += 1
+
+        valid_words = [w for w in words if len(w) > 3 and w.lower() not in stop_words]
+        if n > 0 and len(valid_words) > 0 and n / len(valid_words) > 0.8:
+            topMap[title] = topvalue / n
+
+    return topMap
+
 
 # @app.route('/process-pdf', methods=['POST'])
 # def process_pdf():
@@ -101,6 +139,7 @@ def handleFirstDocument():
     keyWords_json = request.form['words']
     keyWords = json.loads(keyWords_json)
     addKeywords = set()
+    isPrayerFound = False
 
     with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_input:
         temp_input.write(pdf_file.read())
@@ -137,32 +176,37 @@ def handleFirstDocument():
                 if keyWord in addKeywords:
                     continue
 
+                if not isPrayerFound and 'PRAYER' in text:
+                    isPrayerFound = True
+
                 if is_this_page(text,keyWord):
                     bookMark.append({
                         "page": i+1,
                         "title": keyWord
                     })
+                    isPrayerFound = False
                     addKeywords.add(keyWord)
+            
 
-            if "FILED THROUGH" in text or text.count("PETITIONER") > 1 or 'DEPONENT' in text:
+            if "FILED THROUGH" in text or 'DEPONENT' in text or 'APPLICANT' in text or 'PETITIONER' in text:
                 data = pytesseract.image_to_data(images[i], output_type=Output.DICT)
                 for j in range(len(data['text'])-1,0,-1):
                     if data['text'][j-1] == 'FILED' and data['text'][j] == 'THROUGH':
                         signature.append({
-                            'x': data['left'][j - 1],
+                            'x': data['left'][j - 1] - 5,
                             'y': data['top'][j],
                             'h': data['height'][j],
-                            'w': data['width'][j] + data['width'][j-1],
+                            'w': data['width'][j] + data['width'][j-1] + 10,
                             'page': i + 1,
                             'type': "advocate"
                         })
                     
-                    elif (data['text'][j] == 'PETITIONER' or data['text'][j] == 'DEPONENT'):
+                    elif j > len(data['text'])//2 and isPrayerFound and  data['text'][j] == 'PETITIONER' or data['text'][j] == 'DEPONENT':
                         signature.append({
-                            'x': data['left'][j],
+                            'x': data['left'][j] - 5,
                             'y': data['top'][j],
                             'h': data['height'][j],
-                            'w': data['width'][j],
+                            'w': data['width'][j] + 10, 
                             'page': i + 1,
                             'type': "client"
                         })
@@ -282,19 +326,19 @@ def handleFinalDocument():
                 for j in range(len(data['text'])-1, 0, -1):
                     if data['text'][j-1] == 'FILED' and data['text'][j] == 'THROUGH':
                         signature.append({
-                            'x': data['left'][j - 1],
+                            'x': data['left'][j - 1] - 5,
                             'y': data['top'][j],
                             'h': data['height'][j],
-                            'w': data['width'][j] + data['width'][j - 1],
+                            'w': data['width'][j] + data['width'][j - 1] + 10,
                             'page': i + 1,
                             'type': "advocate"
                         })
                     elif (data['text'][j] == 'PETITIONER' or data['text'][j] == 'DEPONENT') and data['text'][j] != '...PETITIONER':
                         signature.append({
-                            'x': data['left'][j],
+                            'x': data['left'][j] - 5,
                             'y': data['top'][j],
                             'h': data['height'][j],
-                            'w': data['width'][j],
+                            'w': data['width'][j] + 10,
                             'page': i + 1,
                             'type': "client"
                         })
@@ -345,21 +389,25 @@ def handleFinalDocument():
 def handleFinalIndexPDF():
     pdf_file = request.files["pdf"]
     index_map = json.loads(request.form["index_map"])
+    advoSig = request.files['advocate-sig']
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_input:
         temp_input.write(pdf_file.read())
         temp_input_path = temp_input.name
+    
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as temp_advo_sig:
+        temp_advo_sig.write(advoSig.read())
+        temp_advo_sig_path = temp_advo_sig.name
 
     try:
         reader = PdfReader(temp_input_path)
         writer = PdfWriter()
         images = convert_from_path(temp_input_path, poppler_path="C:\\Program Files\\poppler-24.08.0\\Library\\bin")
-
         x_pg_col = None
+
         for i, page in enumerate(reader.pages):
             img = images[i]
             data = pytesseract.image_to_data(img, output_type=Output.DICT)
-            print(data["line_num"])
             pdf_width = float(page.mediabox.width)
             pdf_height = float(page.mediabox.height)
             img_width, img_height = img.size
@@ -377,32 +425,25 @@ def handleFinalIndexPDF():
 
             packet = BytesIO()
             can = canvas.Canvas(packet, pagesize=(pdf_width, pdf_height))
-            can.setFont("Helvetica", 10)
+            can.setFont("Helvetica", 12)
+            filter_data = {"top": data['top'],"text": data['text']}
+            titles = index_map.keys()
+        
+            topMap = extractTopValueFromOCRData(filter_data,titles)
+            doneTit = set()
+            for key in topMap:
+                if key not in doneTit:
+                    y_pos = pdf_height - (float(topMap.get(key)) * scale_y)
+                    can.drawString(x_pg_col, y_pos, str(index_map[key]))
+                    doneTit.add(key)
 
-            used_lines = set()
-            for idx in range(len(data["text"])):
-                if data["line_num"][idx] in used_lines:
-                    continue
-
-                line_num = data["line_num"][idx]
-                line_texts = []
-                top = None
-
-                for j in range(len(data["text"])):
-                    if data["line_num"][j] == line_num:
-                        if top is None:
-                            top = data["top"][j]
-                        line_texts.append(data["text"][j])
-
-                full_line = " ".join(line_texts).strip()
-
-                for title in index_map:
-                    # print({"full line": full_line,"title":title})
-                    if full_line.lower() != "" and str(title.strip().lower()) in full_line.lower():
-                        y_pos = pdf_height - (top * scale_y)
-                        can.drawString(x_pg_col, y_pos, str(index_map[title]))
-                        used_lines.add(line_num)
-                        break
+            if i == len(reader.pages) -1:
+                if 'FILE' in data['text'] and 'THROUGH' in data['text']:
+                    idx = data['text'].index('FILE')
+                    x_sig = float(data['left'][idx] * scale_x) - 5
+                    y_sig = pdf_height - float(data['top'][idx]*scale_y) - 2*float(data['height'][idx]*scale_y) - float(100*scale_y)
+                    w_sig = data['width'][idx] + data['width'] + 10 
+                    can.drawImage(temp_advo_sig_path,x_sig*scale_x,y_sig,w_sig*scale_x,height=40,mask='auto')
 
             can.save()
             packet.seek(0)
