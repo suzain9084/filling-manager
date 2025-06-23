@@ -127,6 +127,10 @@ function App() {
   }
 
   const getTitlesFromIndex = async () => {
+    if (index.length === 0) {
+      alert("Please upload both signatures before submitting.");
+      return
+    }
     let formdata = new FormData()
     formdata.append('index', index[0].file)
     let res = await fetch("http://127.0.0.1:5000/handleIndex", {
@@ -143,8 +147,8 @@ function App() {
   }
 
   const workonfirstSection = async (files) => {
-    if (!advocateSig || !clientSig) {
-      alert("Please upload both signatures before submitting.");
+    if (!advocateSig || !clientSig || files.length === 0) {
+      alert("Please upload both signatures or first section file before submitting.");
       return;
     }
     let formdata = getFormData(files)
@@ -173,6 +177,10 @@ function App() {
 
   const handleAnnexures = async () => {
     let formdata = getFormData(annexurefiles)
+    if (Number.parseInt(formdata.get('docCount')) === 0) {
+      alert("upload Annexure files");
+      return
+    }
     let response = await MergePDF.mergeAnnexures(formdata, particulars.current)
     if (response.success) {
       let form = new FormData()
@@ -195,7 +203,10 @@ function App() {
   }
 
   const handleFinalFiles = async (files,title) => {
-    console.log(files)
+    if (files.length === 0) {
+      alert(`You have not upload ${title} file`)
+      return
+    }
     let formdata = getFormData(files)
     let response = await MergePDF.mergeLastDoc(formdata, title)
     if (response.success) {
@@ -224,6 +235,10 @@ function App() {
   // }
 
   const addPageNumberInIndex = async () => {
+    if (index.length === 0) {
+      alert("upload index");
+      return
+    }
     let formdata = new FormData()
     formdata.append("pdf", index[0].file)
     formdata.append("index_map", JSON.stringify(indexMap.current))
