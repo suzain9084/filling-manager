@@ -2,12 +2,8 @@ import React, { useState, useRef } from 'react'
 import './App.css'
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 import DocumentScannerIcon from '@mui/icons-material/DocumentScanner';
-import CircularProgress, {
-  circularProgressClasses,
-} from '@mui/material/CircularProgress';
 import MergePDF from '../service/merge_pdf_service';
 import AddpageNumberService from '../service/finalMergePDF';
-import { darkScrollbar } from '@mui/material';
 
 
 function App() {
