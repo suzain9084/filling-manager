@@ -1,3 +1,4 @@
+from dotenv import load_dotenv
 from flask import Flask, request, send_file
 from io import BytesIO
 from pypdf import PdfReader, PdfWriter
@@ -15,11 +16,12 @@ import ast
 from reportlab.pdfgen import canvas
 import ast
 import base64
+import os
 
-
+load_dotenv()
 
 app = Flask(__name__)
-port = 5000
+port = os.getenv("PORT")
 CORS(app) 
 
 
@@ -496,5 +498,5 @@ def addBookMarks():
 def helloRoute():
     return jsonify({"Name":"suzain"})
 
-if __name__ == '__main__':
-    app.run(debug=True,port=port)
+# if __name__ == '__main__':
+#     app.run(debug=True,port=port)

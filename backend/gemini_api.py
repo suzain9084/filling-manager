@@ -1,9 +1,10 @@
 import google.generativeai as genai
+import os
 
 class GeminiAPI:
     @staticmethod
     def extract_particulars(text):
-        genai.configure(api_key="AIzaSyBUJ92pSMaT_gc-ukOFf4QKTOxWCcwHbOE")
+        genai.configure(api_key=os.getenv("AI_API_KEY"))
         model = genai.GenerativeModel(model_name="gemini-1.5-flash")
 
         response = model.generate_content(
@@ -18,7 +19,7 @@ class GeminiAPI:
 
     def extract_top_value_of_particulars(data,title):
         try:
-            genai.configure(api_key="AIzaSyBUJ92pSMaT_gc-ukOFf4QKTOxWCcwHbOE")
+            genai.configure(api_key=os.getenv("AI_API_KEY"))
             model = genai.GenerativeModel(model_name="gemini-1.5-flash")
 
             prompt = f"""
