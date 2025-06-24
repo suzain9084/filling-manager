@@ -15,11 +15,11 @@ COPY . .
 
 # Install Python dependencies
 RUN python -m venv venv
-RUN /venv/bin/pip install --no-cache-dir -r requirements.txt
+RUN source venv/bin/activate
 RUN pip install -r requirements.txt
 
 # Expose port if needed (e.g. for Flask)
 EXPOSE 5000
 
 # Start the app
-CMD ["venv/bin/python", "server.py"]
+CMD ["python", "server.py"]
