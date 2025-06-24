@@ -498,5 +498,5 @@ def addBookMarks():
 def helloRoute():
     return jsonify({"Name":"suzain"})
 
-# if __name__ == '__main__':
-#     app.run(debug=True,port=port)
+if __name__ == '__main__':
+    app.run(debug=True, host='0.0.0.0', port=int(port) if port else 5000)
