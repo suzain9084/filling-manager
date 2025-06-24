@@ -113,8 +113,8 @@ def extractTopValueFromOCRData(filter_data, titles):
 
 @app.route("/handleIndex",methods=['POST'])
 def handleIndex():
-    index = request.files['index']
     return jsonify({'text': ["abc"],'len': 1}), 200
+    index = request.files['index']
     with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_input:
         temp_input.write(index.read())
         temp_input_path = temp_input.name
