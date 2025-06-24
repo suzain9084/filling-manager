@@ -123,7 +123,7 @@ def handleIndex():
 
     ocrmypdf.ocr(temp_input_path, ocr_output_path, deskew=True, force_ocr=True)
 
-    images = convert_from_path(ocr_output_path,poppler_path="C:\\Program Files\\poppler-24.08.0\\Library\\bin")
+    images = convert_from_path(ocr_output_path)
     text = ""
     for img in images:
         text += pytesseract.image_to_string(img)
