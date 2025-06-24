@@ -17,7 +17,9 @@ import ast
 import base64
 
 
+
 app = Flask(__name__)
+port = 5000
 CORS(app) 
 
 
@@ -495,4 +497,4 @@ def helloRoute():
     return jsonify({"Name":"suzain"})
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True,port=port)
