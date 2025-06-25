@@ -164,7 +164,7 @@ def handleFirstDocument():
 
         reader = PdfReader(ocr_output_path)
         writer = PdfWriter()
-        images = convert_from_path(ocr_output_path,poppler_path="C:\\Program Files\\poppler-24.08.0\\Library\\bin")
+        images = convert_from_path(ocr_output_path)
 
         img_width, img_height = images[0].size
         bookMark = []
@@ -316,7 +316,7 @@ def handleFinalDocument():
 
         reader = PdfReader(ocr_output_path)
         writer = PdfWriter()
-        images = convert_from_path(ocr_output_path, poppler_path="C:\\Program Files\\poppler-24.08.0\\Library\\bin")
+        images = convert_from_path(ocr_output_path)
 
         img_width, img_height = images[0].size
         signature = []
@@ -405,7 +405,7 @@ def handleFinalIndexPDF():
     try:
         reader = PdfReader(temp_input_path)
         writer = PdfWriter()
-        images = convert_from_path(temp_input_path, poppler_path="C:\\Program Files\\poppler-24.08.0\\Library\\bin")
+        images = convert_from_path(temp_input_path)
         x_pg_col = None
 
         for i, page in enumerate(reader.pages):
