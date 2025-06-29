@@ -133,7 +133,7 @@ function App() {
     }
     let formdata = new FormData()
     formdata.append('index', index[0].file)
-    let res = await fetch("https://filling-manager.onrender.com/handleIndex", {
+    let res = await fetch("https://filing-dost-backend.onrender.com/handleIndex", {
       method: 'POST',
       body: formdata
     })

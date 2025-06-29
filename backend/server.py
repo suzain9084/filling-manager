@@ -24,7 +24,7 @@ load_dotenv()
 
 app = Flask(__name__)
 port = os.getenv("PORT")
-CORS(app, resources={r"/*": {"origins": ["http://localhost:5173", "https://your-frontend-domain.com"]}}, supports_credentials=True) 
+CORS(app, supports_credentials=True, origins=["http://localhost:5173", "https://your-frontend-domain.com"])
 
 
 def is_this_page(text, keyword):
@@ -192,7 +192,7 @@ def handleIndex():
         os.remove(repair_output_path)
     except:
         pass
-    
+
     return jsonify({'text': words,'len': len(images)}), 200
 
 @app.route("/handlefirst",methods=['POST'])
