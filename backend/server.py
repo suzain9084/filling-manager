@@ -18,6 +18,7 @@ import ast
 import base64
 import subprocess
 import os
+import subprocess
 
 load_dotenv()
 
@@ -76,6 +77,40 @@ def extractTopValueFromOCRData(filter_data, titles):
     return topMap
 
 
+def is_pdf_valid_with_pdfinfo(pdf_path):
+    try:
+        result = subprocess.run(['pdfinfo', pdf_path], stderr=subprocess.PIPE, stdout=subprocess.PIPE, check=True)
+        return True  # PDF is readable
+    except subprocess.CalledProcessError as e:
+        print("pdfinfo failed:", e.stderr.decode())
+        return False
+    
+
+import subprocess
+import os
+import uuid
+
+def repair_pdf(input_pdf_path, output_dir):
+    gs_command = [
+        'gs',
+        '-o', output_dir,
+        '-sDEVICE=pdfwrite',
+        '-dPDFSETTINGS=/prepress',
+        '-dCompatibilityLevel=1.4',
+        '-dNOPAUSE',
+        '-dQUIET',
+        '-dBATCH',
+        input_pdf_path
+    ]
+
+    try:
+        subprocess.run(gs_command, check=True, stderr=subprocess.PIPE)
+        return True
+    except subprocess.CalledProcessError as e:
+        return False
+
+
+
 # @app.route('/process-pdf', methods=['POST'])
 # def process_pdf():
 #     if 'pdf' not in request.files or 'bookMark' not in request.form:
@@ -122,7 +157,18 @@ def handleIndex():
         ocr_output_path = temp_ocr.name
 
     try:
-        ocrmypdf.ocr(temp_input_path, ocr_output_path, deskew=True, force_ocr=True)
+        if is_pdf_valid_with_pdfinfo(temp_input_path):
+            ocrmypdf.ocr(temp_input_path, ocr_output_path, deskew=True, force_ocr=True)
+        else:
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_repair:
+                repair_output_path = temp_repair.name
+            if repair_pdf(temp_input_path,repair_output_path):
+                ocrmypdf.ocr(repair_output_path, ocr_output_path, deskew=True, force_ocr=True)
+            else:
+                return jsonify(
+                    {"error": "This PDF could not be repaired. Please try uploading a different or original version of the file."}
+                ), 400
+
     except Exception as e:
         print(f"OCR failed: {e}")
         try:
@@ -143,6 +189,7 @@ def handleIndex():
     try:
         os.remove(temp_input_path)
         os.remove(ocr_output_path)
+        os.remove(repair_output_path)
     except:
         pass
     
