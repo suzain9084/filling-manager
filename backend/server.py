@@ -111,174 +111,23 @@ def extractTopValueFromOCRData(filter_data, titles):
 #     except Exception as err:
 #         return str(err), 500
 
-def repair_pdf(input_path, output_path):
-    """Try multiple PDF repair methods in order of preference"""
-    
-    # Method 1: Try qpdf with different options
-    try:
-        subprocess.run(['qpdf', '--linearize', '--replace-input', input_path, output_path], check=True)
-        return True
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        pass
-    
-    # Method 2: Try qpdf with object-streams disabled
-    try:
-        subprocess.run(['qpdf', '--object-streams=disable', '--linearize', input_path, output_path], check=True)
-        return True
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        pass
-    
-    # Method 3: Try qpdf with compression disabled
-    try:
-        subprocess.run(['qpdf', '--compress-streams=n', '--linearize', input_path, output_path], check=True)
-        return True
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        pass
-    
-    # Method 4: Use pypdf to rebuild the PDF
-    try:
-        reader = PdfReader(input_path)
-        writer = PdfWriter()
-        
-        # Copy all pages
-        for page in reader.pages:
-            writer.add_page(page)
-        
-        # Write to output
-        with open(output_path, 'wb') as output_file:
-            writer.write(output_file)
-        return True
-    except Exception as e:
-        print(f"pypdf repair failed: {e}")
-    
-    # Method 5: Try to extract and rebuild with pikepdf (if available)
-    try:
-        import pikepdf
-        with pikepdf.open(input_path) as pdf:
-            pdf.save(output_path)
-        return True
-    except (ImportError, Exception) as e:
-        print(f"pikepdf repair failed: {e}")
-    
-    # Method 6: Use ocrmypdf as a repair tool (it can handle some corruptions)
-    try:
-        ocrmypdf.ocr(input_path, output_path, skip_text=True, force_ocr=False, skip_big=True)
-        return True
-    except Exception as e:
-        print(f"ocrmypdf repair failed: {e}")
-    
-    # Method 7: Last resort - try to copy the file directly
-    try:
-        import shutil
-        shutil.copy2(input_path, output_path)
-        return True
-    except Exception as e:
-        print(f"File copy failed: {e}")
-    
-    return False
-
-def repair_pdf_advanced(input_path, output_path):
-    """Advanced PDF repair with multiple fallback strategies"""
-    
-    # Strategy 1: Try to fix with qpdf using various options
-    qpdf_options = [
-        ['qpdf', '--linearize', '--replace-input', input_path, output_path],
-        ['qpdf', '--object-streams=disable', '--linearize', input_path, output_path],
-        ['qpdf', '--compress-streams=n', '--linearize', input_path, output_path],
-        ['qpdf', '--deterministic-id', '--linearize', input_path, output_path],
-        ['qpdf', '--preserve-encryption', '--linearize', input_path, output_path],
-        ['qpdf', '--qdf', '--object-streams=disable', input_path, output_path]
-    ]
-    
-    for option in qpdf_options:
-        try:
-            subprocess.run(option, check=True, capture_output=True, timeout=30)
-            return True
-        except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
-            continue
-    
-    # Strategy 2: Try to extract pages individually and rebuild
-    try:
-        reader = PdfReader(input_path)
-        writer = PdfWriter()
-        
-        for i, page in enumerate(reader.pages):
-            try:
-                # Try to extract each page individually
-                page_writer = PdfWriter()
-                page_writer.add_page(page)
-                
-                # Create temporary file for this page
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_page:
-                    page_writer.write(temp_page)
-                    temp_page_path = temp_page.name
-                
-                # Try to repair this individual page
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_repaired_page:
-                    if repair_pdf(temp_page_path, temp_repaired_page.name):
-                        # Read the repaired page and add to main writer
-                        repaired_reader = PdfReader(temp_repaired_page.name)
-                        if repaired_reader.pages:
-                            writer.add_page(repaired_reader.pages[0])
-                    else:
-                        # If repair fails, try to add the original page
-                        writer.add_page(page)
-                
-                # Clean up temporary files
-                os.unlink(temp_page_path)
-                os.unlink(temp_repaired_page.name)
-                
-            except Exception as e:
-                print(f"Failed to process page {i}: {e}")
-                # Try to add the original page anyway
-                try:
-                    writer.add_page(page)
-                except:
-                    pass
-        
-        # Write the repaired PDF
-        with open(output_path, 'wb') as output_file:
-            writer.write(output_file)
-        return True
-        
-    except Exception as e:
-        print(f"Advanced repair failed: {e}")
-        return False
-
 @app.route("/handleIndex",methods=['POST'])
 def handleIndex():
     index = request.files['index']
     with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_input:
         temp_input.write(index.read())
         temp_input_path = temp_input.name
-    
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_repaired:
-        temp_repaired_path = temp_repaired.name
-    
-    # Try to repair the PDF with multiple methods
-    repair_success = repair_pdf(temp_input_path, temp_repaired_path)
-    
-    if not repair_success:
-        # If basic repair fails, try advanced repair
-        repair_success = repair_pdf_advanced(temp_input_path, temp_repaired_path)
-    
-    if not repair_success:
-        # If all repair methods fail, use the original file
-        print("Warning: PDF repair failed, using original file")
-        temp_repaired_path = temp_input_path
 
     with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_ocr:
         ocr_output_path = temp_ocr.name
 
     try:
-        ocrmypdf.ocr(temp_repaired_path, ocr_output_path, deskew=True, force_ocr=True)
+        ocrmypdf.ocr(temp_input_path, ocr_output_path, deskew=True, force_ocr=True)
     except Exception as e:
         print(f"OCR failed: {e}")
-        # If OCR fails, try with different options
         try:
-            ocrmypdf.ocr(temp_repaired_path, ocr_output_path, deskew=True, force_ocr=True, skip_big=True)
+            ocrmypdf.ocr(temp_input_path, ocr_output_path, deskew=True, force_ocr=True, skip_big=True)
         except Exception as e2:
-            print(f"OCR with skip_big also failed: {e2}")
             return jsonify({'error': 'Failed to process PDF'}), 500
 
     images = convert_from_path(ocr_output_path)
@@ -293,8 +142,6 @@ def handleIndex():
     # Clean up temporary files
     try:
         os.remove(temp_input_path)
-        if temp_repaired_path != temp_input_path:
-            os.remove(temp_repaired_path)
         os.remove(ocr_output_path)
     except:
         pass
@@ -608,7 +455,7 @@ def handleFinalIndexPDF():
                     doneTit.add(key)
 
             if i == len(reader.pages) -1:
-                if 'FILE' in data['text'] and 'THROUGH' in data['text']:
+                if 'FILED' in data['text'] and 'THROUGH' in data['text']:
                     idx = data['text'].index('FILE')
                     x_sig = float(data['left'][idx] * scale_x) - 5
                     y_sig = pdf_height - float(data['top'][idx]*scale_y) - 2*float(data['height'][idx]*scale_y) - float(100*scale_y)
@@ -663,232 +510,6 @@ def addBookMarks():
 @app.route("/",methods=['GET'])
 def helloRoute():
     return jsonify({"Name":"suzain"})
-
-@app.route("/repair-pdf-diagnostic", methods=['POST'])
-def repair_pdf_diagnostic():
-    """Diagnostic endpoint to test different PDF repair methods"""
-    if 'pdf' not in request.files:
-        return jsonify({'error': 'No PDF file provided'}), 400
-    
-    pdf_file = request.files['pdf']
-    
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_input:
-        temp_input.write(pdf_file.read())
-        temp_input_path = temp_input.name
-    
-    # First, validate the PDF
-    validation = validate_pdf(temp_input_path)
-    
-    diagnostic_results = {
-        'validation': validation,
-        'original_file_size': os.path.getsize(temp_input_path),
-        'repair_methods_tested': [],
-        'successful_methods': [],
-        'errors': []
-    }
-    
-    # If PDF is already valid, no need to repair
-    if validation['is_valid']:
-        diagnostic_results['message'] = 'PDF is already valid, no repair needed'
-        try:
-            os.remove(temp_input_path)
-        except:
-            pass
-        return jsonify(diagnostic_results), 200
-    
-    # Test different repair methods
-    repair_methods = [
-        {
-            'name': 'qpdf_linearize',
-            'function': lambda: subprocess.run(['qpdf', '--linearize', temp_input_path, 'temp_output.pdf'], check=True, capture_output=True)
-        },
-        {
-            'name': 'qpdf_object_streams_disable',
-            'function': lambda: subprocess.run(['qpdf', '--object-streams=disable', '--linearize', temp_input_path, 'temp_output.pdf'], check=True, capture_output=True)
-        },
-        {
-            'name': 'qpdf_compress_disable',
-            'function': lambda: subprocess.run(['qpdf', '--compress-streams=n', '--linearize', temp_input_path, 'temp_output.pdf'], check=True, capture_output=True)
-        },
-        {
-            'name': 'pypdf_rebuild',
-            'function': lambda: rebuild_with_pypdf(temp_input_path, 'temp_output.pdf')
-        },
-        {
-            'name': 'ocrmypdf_repair',
-            'function': lambda: ocrmypdf.ocr(temp_input_path, 'temp_output.pdf', skip_text=True, force_ocr=False, skip_big=True)
-        }
-    ]
-    
-    for method in repair_methods:
-        diagnostic_results['repair_methods_tested'].append(method['name'])
-        
-        try:
-            method['function']()
-            
-            # Check if output file was created and is valid
-            if os.path.exists('temp_output.pdf'):
-                try:
-                    test_reader = PdfReader('temp_output.pdf')
-                    if len(test_reader.pages) > 0:
-                        # Validate the repaired PDF
-                        repaired_validation = validate_pdf('temp_output.pdf')
-                        diagnostic_results['successful_methods'].append({
-                            'method': method['name'],
-                            'output_size': os.path.getsize('temp_output.pdf'),
-                            'pages': len(test_reader.pages),
-                            'validation': repaired_validation
-                        })
-                    os.remove('temp_output.pdf')
-                except Exception as e:
-                    diagnostic_results['errors'].append(f"{method['name']}: Output file created but invalid - {str(e)}")
-                    if os.path.exists('temp_output.pdf'):
-                        os.remove('temp_output.pdf')
-            else:
-                diagnostic_results['errors'].append(f"{method['name']}: No output file created")
-                
-        except Exception as e:
-            diagnostic_results['errors'].append(f"{method['name']}: {str(e)}")
-    
-    # Clean up
-    try:
-        os.remove(temp_input_path)
-    except:
-        pass
-    
-    return jsonify(diagnostic_results), 200
-
-def rebuild_with_pypdf(input_path, output_path):
-    """Helper function to rebuild PDF with pypdf"""
-    reader = PdfReader(input_path)
-    writer = PdfWriter()
-    
-    for page in reader.pages:
-        writer.add_page(page)
-    
-    with open(output_path, 'wb') as output_file:
-        writer.write(output_file)
-
-def validate_pdf(pdf_path):
-    """Validate PDF and identify common issues"""
-    validation_result = {
-        'is_valid': False,
-        'file_size': 0,
-        'issues': [],
-        'page_count': 0,
-        'can_read': False,
-        'can_extract_pages': False
-    }
-    
-    try:
-        validation_result['file_size'] = os.path.getsize(pdf_path)
-        
-        # Check if file is too small (likely corrupted)
-        if validation_result['file_size'] < 100:
-            validation_result['issues'].append('File too small - likely corrupted')
-            return validation_result
-        
-        # Try to read with pypdf
-        try:
-            reader = PdfReader(pdf_path)
-            validation_result['can_read'] = True
-            validation_result['page_count'] = len(reader.pages)
-            
-            if validation_result['page_count'] == 0:
-                validation_result['issues'].append('PDF has no pages')
-            else:
-                validation_result['is_valid'] = True
-                
-            # Try to extract first page
-            try:
-                if validation_result['page_count'] > 0:
-                    first_page = reader.pages[0]
-                    validation_result['can_extract_pages'] = True
-            except Exception as e:
-                validation_result['issues'].append(f'Cannot extract pages: {str(e)}')
-                
-        except Exception as e:
-            validation_result['issues'].append(f'Cannot read PDF: {str(e)}')
-        
-        # Check file header
-        try:
-            with open(pdf_path, 'rb') as f:
-                header = f.read(8)
-                if not header.startswith(b'%PDF'):
-                    validation_result['issues'].append('Invalid PDF header')
-        except Exception as e:
-            validation_result['issues'].append(f'Cannot read file header: {str(e)}')
-        
-        # Check for EOF marker
-        try:
-            with open(pdf_path, 'rb') as f:
-                f.seek(-1024, 2)  # Go to last 1KB
-                end_content = f.read()
-                if b'%%EOF' not in end_content:
-                    validation_result['issues'].append('Missing EOF marker')
-        except Exception as e:
-            validation_result['issues'].append(f'Cannot check EOF: {str(e)}')
-            
-    except Exception as e:
-        validation_result['issues'].append(f'General validation error: {str(e)}')
-    
-    return validation_result
-
-@app.route("/repair-pdf-only", methods=['POST'])
-def repair_pdf_only():
-    """Simple endpoint to just repair PDF without OCR"""
-    if 'pdf' not in request.files:
-        return jsonify({'error': 'No PDF file provided'}), 400
-    
-    pdf_file = request.files['pdf']
-    
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_input:
-        temp_input.write(pdf_file.read())
-        temp_input_path = temp_input.name
-    
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_repaired:
-        temp_repaired_path = temp_repaired.name
-    
-    # Try to repair the PDF
-    repair_success = repair_pdf(temp_input_path, temp_repaired_path)
-    
-    if not repair_success:
-        # If basic repair fails, try advanced repair
-        repair_success = repair_pdf_advanced(temp_input_path, temp_repaired_path)
-    
-    if not repair_success:
-        # If all repair methods fail, return error
-        try:
-            os.remove(temp_input_path)
-        except:
-            pass
-        return jsonify({'error': 'Failed to repair PDF with all available methods'}), 500
-    
-    # Read the repaired PDF and return as base64
-    try:
-        with open(temp_repaired_path, 'rb') as f:
-            pdf_data = f.read()
-        
-        pdf_base64 = base64.b64encode(pdf_data).decode('utf-8')
-        
-        # Clean up
-        os.remove(temp_input_path)
-        os.remove(temp_repaired_path)
-        
-        return jsonify({
-            'success': True,
-            'pdf': pdf_base64,
-            'message': 'PDF repaired successfully'
-        }), 200
-        
-    except Exception as e:
-        # Clean up
-        try:
-            os.remove(temp_input_path)
-            os.remove(temp_repaired_path)
-        except:
-            pass
-        return jsonify({'error': f'Failed to encode repaired PDF: {str(e)}'}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=int(port) if port else 5000)
