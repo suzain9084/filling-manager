@@ -4,6 +4,9 @@ import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 import DocumentScannerIcon from '@mui/icons-material/DocumentScanner';
 import MergePDF from '../service/merge_pdf_service';
 import AddpageNumberService from '../service/finalMergePDF';
+import CircularProgress from '@mui/material/CircularProgress';
+import Box from '@mui/material/Box';
+import { FileText } from 'lucide-react';
 
 
 function App() {
@@ -14,6 +17,9 @@ function App() {
   const [vakalatnamafiles, setvakalatnamaFiles] = useState([]);
   const [proofService, setproofService] = useState([])
   const [courtFee, setcourtFee] = useState([])
+  const [authLeter, setAuthLetter] = useState([])
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [currStep, setCurrStep] = useState([])
   
   const [advocateSig, setadvocateSig] = useState(null)
   const [clientSig, setclientSig] = useState(null)
@@ -23,6 +29,7 @@ function App() {
   const particulars = useRef([])
   const bookMarks = useRef([])
   const indexMap = useRef({})
+  const typeRef = useRef(null)
 
   const blobArrayRef = useRef([])
 
@@ -48,10 +55,14 @@ function App() {
         if (bookMarks.current[i][j]['title'] == "last") {
           currPageInc += bookMarks.current[i][j]['page']
         } else {
+          let next = bookMarks.current[i][j+1]['page']
           const page = bookMarks.current[i][j]['page']
+          if ( bookMarks.current[i][j+1]['title'] !== "last") {
+            next -= 1;
+          }
           const title = bookMarks.current[i][j]['title']
           bookmark[page + currPageInc + IndexLen.current] = title
-          index_map[title] = page + currPageInc
+          index_map[title] = `${page + currPageInc} - ${currPageInc + next}`
         }
       }
     }
@@ -65,6 +76,7 @@ function App() {
     const newFiles = Array.from(event.target.files).map((file) => ({
       file,
       title: file.name.replace('.pdf', ''),
+      range: "",
     }));
     if (currSection.current == 0) {
       setindex(newFiles)
@@ -78,8 +90,27 @@ function App() {
       setvakalatnamaFiles((prev) => [...prev, ...newFiles])
     } else if (currSection.current == 5) {
       setproofService((prev) => [...prev, ...newFiles])
-    } else {
+    } else if (currSection.current == 6) {
       setcourtFee((prev) => [...prev, ...newFiles])
+    } else {
+      setAuthLetter((prev) => [...prev, ...newFiles])
+    }
+  };
+
+  const handleRangeChange = (section, fileIndex, e) => {
+    const value = e.target.value;
+
+    const pattern = /^\d{1,4}-\d{1,4}$/;
+    if (value !== "" && !pattern.test(value)) return;
+
+    if (section === 1) {
+      const updated = [...firstfiles];
+      updated[fileIndex].range = value;
+      setfirstFiles(updated);
+    } else if (section === 3) {
+      const updated = [...application];
+      updated[fileIndex].range = value;
+      setapplication(updated);
     }
   };
 
@@ -102,9 +133,12 @@ function App() {
     } else if (section == 5) {
       const updatedFiles = proofService.filter((_, i) => i !== index);
       setproofService(updatedFiles)
-    } else {
+    } else if(section == 6) {
       const updatedFiles = courtFee.filter((_, i) => i !== index);
       setcourtFee(updatedFiles)
+    } else {
+      const updatedFiles = authLeter.filter((_, i) => i !== index);
+      setAuthLetter(updatedFiles)
     }
   };
 
@@ -128,7 +162,7 @@ function App() {
 
   const getTitlesFromIndex = async () => {
     if (index.length === 0) {
-      alert("Please upload both signatures before submitting.");
+      alert("you have not uploaded first file");
       return
     }
     let formdata = new FormData()
@@ -142,13 +176,14 @@ function App() {
       particulars.current = Array.from(list['text'])
       IndexLen.current = list['len']
       console.log("Done with Title")
+      console.log(list['text'])
     }
     return res.ok
   }
 
-  const workonfirstSection = async (files) => {
+  const workonfirstSection = async (files,titles) => {
     if (!advocateSig || !clientSig || files.length === 0) {
-      alert("Please upload both signatures or first section file before submitting.");
+      alert("You have not uploaded first file");
       return;
     }
     let formdata = getFormData(files)
@@ -156,9 +191,16 @@ function App() {
     if (response.success) {
       let form = new FormData()
       form.append("pdf", new Blob([response.pdf], { type: "application/pdf" }));
-      form.append("advocate-sig", advocateSig)
-      form.append('client-sig', clientSig)
-      form.append("words", JSON.stringify(particulars.current))
+      form.append('type',typeRef.current.value)
+      if (advocateSig && clientSig) {
+        form.append("advocate-sig", advocateSig)
+        form.append('client-sig', clientSig)
+        form.append('isOrignal', "false")
+      } else {
+        form.append('isOrignal', "true")
+      }
+      console.log("title: ",titles)
+      form.append("words", JSON.stringify(titles))
       let res = await fetch("http://127.0.0.1:5000/handlefirst", {
         method: 'POST',
         body: form
@@ -181,7 +223,12 @@ function App() {
       alert("upload Annexure files");
       return
     }
-    let response = await MergePDF.mergeAnnexures(formdata, particulars.current)
+    let isOrignal = true
+    if (advocateSig) {
+      isOrignal = false
+    }
+    console.log(typeRef.current.value, advocateSig,isOrignal)
+    let response = await MergePDF.mergeAnnexures(formdata, particulars.current,typeRef.current.value, advocateSig,isOrignal)
     if (response.success) {
       let form = new FormData()
       form.append("pdf", new Blob([response.pdf], { type: "application/pdf" }));
@@ -212,8 +259,14 @@ function App() {
     if (response.success) {
       let form = new FormData()
       form.append("pdf", new Blob([response.pdf], { type: "application/pdf" }));
-      form.append("advocate-sig", advocateSig)
-      form.append('client-sig', clientSig)
+      if (advocateSig && clientSig) {
+        form.append("advocate-sig", advocateSig)
+        form.append('client-sig', clientSig)
+        form.append('isOrignal', "false")
+      }else{
+        form.append("isOrignal", "true")
+      }
+      form.append('type',typeRef.current.value)
       let res = await fetch("http://127.0.0.1:5000/handleFinal", {
         method: 'POST',
         body: form
@@ -228,12 +281,6 @@ function App() {
     }
   }
 
-  // const makeParallelProcessing = async () => {
-  //   await workonfirstSection()
-  //   await handleAnnexures()
-  //   await handleFinalFiles()
-  // }
-
   const addPageNumberInIndex = async () => {
     if (index.length === 0) {
       alert("upload index");
@@ -242,7 +289,12 @@ function App() {
     let formdata = new FormData()
     formdata.append("pdf", index[0].file)
     formdata.append("index_map", JSON.stringify(indexMap.current))
-    formdata.append('advocate-sig',advocateSig)
+    if(advocateSig){
+      formdata.append('advocate-sig',advocateSig)
+      formdata.append("isOrignal", "false")
+    }else{
+      formdata.append("isOrignal", "true")
+    }
     let res = await fetch("http://127.0.0.1:5000/handleFinalIndexPDF", {
       method: 'POST',
       body: formdata
@@ -255,47 +307,75 @@ function App() {
   }
 
   const handleSubmitFile = async () => {
+    setIsSubmitting(true)
+    setCurrStep("Getting Data From Index")
     let res = await getTitlesFromIndex()
     if (res) {
+      setCurrStep("work on first pdf (Doc before Annexures)")
       let temp = []
       let i = 0
       while (i < particulars.current.length && particulars.current[i].toLowerCase().search(/annexure/) === -1) {
         if (particulars.current[i].toLowerCase().search(/court fee/) !== -1) {
           if (temp.length !== 0) {
-            await workonfirstSection(temp)
+            await workonfirstSection(temp,particulars.current.slice(0,i))
           }
           await handleFinalFiles(courtFee,particulars.current[i])
           temp = []
-        } else if (particulars.current[i].toLowerCase().search(/application under/) !== -1){
-            await handleFinalFiles(application,particulars.current[i])
         } else {
           if ( i < firstfiles.length){
             temp.push(firstfiles[i])
+            if(firstfiles[i].value !== ""){
+              i = parseInt(firstfiles[i].range.split('-')[1]) - 1
+            }
           }
         }
         i++;
       }
       if (temp.length != 0) {
-        await workonfirstSection(temp)
+        await workonfirstSection(temp,particulars.current.slice(0,i))
       }
+      setCurrStep("wok on Annexures")
       await handleAnnexures()
-      i = particulars.current.length - 1
-      while (i >= 0 && particulars.current[i].toLowerCase().search(/annexure/) === -1){
+      setCurrStep("work on Application Vakalatnama and all...")
+      i = particulars.current.length - 1;
+      while (i >= 0 && particulars.current[i].toLowerCase().search(/annexure/) === -1) {
         i--;
       }
+      i++;
+      let applicStartAt = null
+      let j = 0;
+      if (application.length > 0) {
+        applicStartAt = parseInt(application[0].range.split("-")[0]) - 1;
+      }
+
       while (i < particulars.current.length){
-        if (particulars.current[i].toLowerCase().search(/application under/) !== -1) {
-          await handleFinalFiles(application,particulars.current[i])
+        if (applicStartAt !== null  && i == applicStartAt){
+          let end = parseInt(application[j].range.split("-")[1]) - 1;
+          await workonfirstSection([application[j]],particulars.current.slice(i,end+1));
+          i = end;
+          j++;
+          if (j < application.length){
+            applicStartAt = parseInt(application[j].file.range.split("-")[0]);
+          } else {
+            applicStartAt = null;
+          }
         } else if (particulars.current[i].toLowerCase().search(/vakalatnama/) !== -1){
           await handleFinalFiles(vakalatnamafiles,particulars.current[i])
         } else if (particulars.current[i].toLowerCase().search(/proof of service/) !== -1){
           await handleFinalFiles(proofService,particulars.current[i])
+        } else if (particulars.current[i].toLowerCase().search(/authority letter/) !== -1){
+          await handleFinalFiles(authLeter, particulars.current[i])
+        } else if (particulars.current[i].toLowerCase().search(/court fee/) !== -1){
+          await handleFinalFiles(courtFee, particulars.current[i])
         }
+        console.log(particulars.current[i])
         i++;
       }
+      setCurrStep("Adding book marks in whole doc")
       makeBookMarkForWholeDocument()
+      setCurrStep("Insert page number range in Index")
       await addPageNumberInIndex()
-      console.log(blobArrayRef.current)
+      setCurrStep("Preparing Doc for downloading...")
       let response = await AddpageNumberService.addPageNoTitle(blobArrayRef.current)
       if (response.success) {
         let formdata = new FormData()
@@ -318,14 +398,24 @@ function App() {
         }
       }
     }
+    setIsSubmitting(false)
   }
 
   return (
+  <>
     <div className="pdf-container">
+
       <h1 className="title">PDF Annexure Manager</h1>
       <p className="subtitle">
         Upload multiple PDF files, add titles, and generate a merged PDF with bookmarks and OCR.
       </p>
+
+      <label style={{marginRight: "10px"}} for="type">Select Court:</label>
+      <select name="" id="type" ref={typeRef}>
+        <option value="high_court">High Court</option>
+        <option value="cat">CAT</option>
+        <option value="ngt">NGT</option>
+      </select>
 
       <div>
         <input type="file" accept="application/pdf" multiple hidden onChange={handleFileChange} />
@@ -339,7 +429,9 @@ function App() {
             <div className="file-info">
               <strong>{fileData.file.name}</strong>
             </div>
-            <div className="delete-btn" onClick={() => handleDelete(index, 0)}><DeleteForeverIcon /></div>
+            <div className="delete-btn" onClick={() => handleDelete(index, 0)}>
+              <DeleteForeverIcon />
+            </div>
           </div>
         ))}
         {index.length == 0 && <div className="actions">
@@ -350,14 +442,23 @@ function App() {
       </div>
 
       <div className="uploaded-section">
-        <h2>Upload First Files</h2>
+        <h2>Upload First Files (file before Annexures)</h2>
         {firstfiles.map((fileData, index) => (
           <div className="file-card" key={index}>
             <div className="file-icon"><DocumentScannerIcon /></div>
             <div className="file-info">
               <strong>{fileData.file.name}</strong>
+              <input
+                type="text"
+                placeholder="Index Serial Range (e.g., 1-2) of this doc"
+                value={fileData.file.range}
+                onChange={(e) => handleRangeChange(1, index, e)}
+                className="range-input"
+              />
             </div>
-            <div className="delete-btn" onClick={() => handleDelete(index, 1)}><DeleteForeverIcon /></div>
+            <div className="delete-btn" onClick={() => handleDelete(index, 1)}>
+              <DeleteForeverIcon />
+            </div>
           </div>
         ))}
         <div className="actions">
@@ -368,8 +469,6 @@ function App() {
       </div>
 
 
-
-
       <div className="uploaded-section">
         <h2>Upload Annexure Files</h2>
         {annexurefiles.map((fileData, index) => (
@@ -378,7 +477,9 @@ function App() {
             <div className="file-info">
               <strong>{fileData.file.name}</strong>
             </div>
-            <div className="delete-btn" onClick={() => handleDelete(index, 2)}><DeleteForeverIcon /></div>
+            <div className="delete-btn" onClick={() => handleDelete(index, 2)}>
+              <DeleteForeverIcon />
+            </div>
           </div>
         ))}
         <div className="actions">
@@ -391,21 +492,30 @@ function App() {
 
 
       <div className="uploaded-section">
-        <h2>Upload Application</h2>
+        <h2>Upload Application (which come after annexure)</h2>
         {application.map((fileData, index) => (
           <div className="file-card" key={index}>
             <div className="file-icon"><DocumentScannerIcon /></div>
             <div className="file-info">
               <strong>{fileData.file.name}</strong>
+              <input
+                type="text"
+                placeholder="Index Serial Range (e.g., 1-2) of this doc"
+                value={fileData.file.range}
+                onChange={(e) => handleRangeChange(3, index, e)}
+                className="range-input"
+              />
             </div>
-            <div className="delete-btn" onClick={() => handleDelete(index, 3)}><DeleteForeverIcon /></div>
+            <div className="delete-btn" onClick={() => handleDelete(index, 3)}>
+              <DeleteForeverIcon />
+            </div>
           </div>
         ))}
-        {application.length == 0 && <div className="actions">
+        <div className="actions">
           <button className="add-more-btn" onClick={() => { currSection.current = 3; document.querySelector('input[type="file"]').click() }}>
             + Add Applcation
           </button>
-        </div>}
+        </div>
       </div>
 
 
@@ -464,6 +574,24 @@ function App() {
         </div>
       </div>
 
+      <div className="uploaded-section">
+        <h2>Uploaded Authority Letter</h2>
+        {authLeter.map((fileData, index) => (
+          <div className="file-card" key={index}>
+            <div className="file-icon"><DocumentScannerIcon /></div>
+            <div className="file-info">
+              <strong>{fileData.file.name}</strong>
+            </div>
+            <div className="delete-btn" onClick={() => handleDelete(index, 7)}><DeleteForeverIcon /></div>
+          </div>
+        ))}
+        <div className="actions">
+          {authLeter.length == 0 && <button className="add-more-btn" onClick={() => { currSection.current = 7; document.querySelector('input[type="file"]').click() }}>
+            + Add More Files
+          </button>}
+        </div>
+      </div>
+
 
 
       <div className="uploaded-section">
@@ -487,31 +615,17 @@ function App() {
       </div>
 
       <footer className="footer">© 2025 PDF Annexure Manager. All rights reserved.</footer>
-      {/* {submitting && (
-        <div className='loader-cont'>
-          <div>
-            <CircularProgress
-              variant="indeterminate"
-              disableShrink
-              sx={(theme) => ({
-                color: '#1a90ff',
-                animationDuration: '550ms',
-                position: 'absolute',
-                left: 0,
-                [`& .${circularProgressClasses.circle}`]: {
-                  strokeLinecap: 'round',
-                },
-                ...theme.applyStyles('dark', {
-                  color: '#308fe8',
-                }),
-              })}
-              size={40}
-              thickness={4}
-            />
-          </div>
-        </div>
-      )} */}
     </div>
+    {isSubmitting && (
+        <div className='loader-cont'>
+          <FileText style={{width: "150px", height: "150px", color:"white", marginTop: "150px"}} className='animation' />
+          <h1 style={{ color: "white"}}>{currStep}</h1>
+          <Box sx={{ display: 'flex' }}>
+            <CircularProgress />
+          </Box>
+        </div>
+      )}
+    </>
   )
 }
 
