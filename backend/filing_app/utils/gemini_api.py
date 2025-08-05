@@ -1,5 +1,6 @@
 import google.generativeai as genai
 import os
+import ast
 
 class GeminiAPI:
     @staticmethod
@@ -14,7 +15,9 @@ class GeminiAPI:
         )
 
         try:
-            return response.text.strip()
+            words = response.text.strip()
+            cleaned = words.strip("`python\n").strip("`")
+            return ast.literal_eval(cleaned)
         except Exception as e:
             print("Error parsing Gemini response:", e)
             return []

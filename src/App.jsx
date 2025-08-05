@@ -167,27 +167,27 @@ function App() {
     }
     let formdata = new FormData()
     formdata.append('index', index[0].file)
-    let res = await fetch("http://127.0.0.1:5000/handleIndex", {
+    let res = await fetch("http://127.0.0.1:5000/api/extract-particulars", {
       method: 'POST',
       body: formdata
     })
     if (res.ok) {
       let list = await res.json()
+      console.log(list)
       particulars.current = Array.from(list['text'])
       IndexLen.current = list['len']
       console.log("Done with Title")
-      console.log(list['text'])
     }
     return res.ok
   }
 
   const workonfirstSection = async (files,titles) => {
-    if (!advocateSig || !clientSig || files.length === 0) {
-      alert("You have not uploaded first file");
-      return;
-    }
     let formdata = getFormData(files)
-    let response = await MergePDF.mergeFirstpdf(formdata)
+    let isOrignal = false
+    if (!advocateSig && !clientSig) {
+      isOrignal = true
+    }
+    let response = await MergePDF.mergeFirstpdf(formdata,advocateSig,isOrignal,typeRef.current.value)
     if (response.success) {
       let form = new FormData()
       form.append("pdf", new Blob([response.pdf], { type: "application/pdf" }));
@@ -201,18 +201,22 @@ function App() {
       }
       console.log("title: ",titles)
       form.append("words", JSON.stringify(titles))
-      let res = await fetch("http://127.0.0.1:5000/handlefirst", {
+      let res = await fetch("http://127.0.0.1:5000/api/work-on-first-file", {
         method: 'POST',
         body: form
       })
 
       if (res.ok) {
         let data = await res.json()
+        console.log(data)
         const updated = [...blobArrayRef.current, base64ToBlob(data.pdf)]
         blobArrayRef.current = updated
+        console.log(updated)
         let copyBookMarks = [...bookMarks.current, data.bookmarks]
         bookMarks.current = copyBookMarks
         console.log("Done with first pdf")
+      } else{
+        console.log(await res.json())
       }
     }
   }
@@ -234,12 +238,13 @@ function App() {
       form.append("pdf", new Blob([response.pdf], { type: "application/pdf" }));
       form.append("bookmark", JSON.stringify(response.bookmark))
 
-      let res = await fetch("http://127.0.0.1:5000/handleAnnexure", {
+      let res = await fetch("http://127.0.0.1:5000/api/wotk-on-annexures", {
         method: 'POST',
         body: form
       })
       if (res.ok) {
         let data = await res.blob()
+        console.log(data)
         let copyBookMarks = [...bookMarks.current, response.bookmark]
         bookMarks.current = copyBookMarks
         const updated = [...blobArrayRef.current, data]
@@ -255,24 +260,21 @@ function App() {
       return
     }
     let formdata = getFormData(files)
-    let response = await MergePDF.mergeLastDoc(formdata, title)
+    let isOrignal = false
+    if (!advocateSig && !clientSig) {
+      isOrignal = true
+    }
+    let response = await MergePDF.mergeLastDoc(formdata, title,advocateSig,typeRef.current.value,isOrignal)
     if (response.success) {
       let form = new FormData()
       form.append("pdf", new Blob([response.pdf], { type: "application/pdf" }));
-      if (advocateSig && clientSig) {
-        form.append("advocate-sig", advocateSig)
-        form.append('client-sig', clientSig)
-        form.append('isOrignal', "false")
-      }else{
-        form.append("isOrignal", "true")
-      }
-      form.append('type',typeRef.current.value)
-      let res = await fetch("http://127.0.0.1:5000/handleFinal", {
+      let res = await fetch("http://127.0.0.1:5000/api/wotk-on-annexures", {
         method: 'POST',
         body: form
       })
       if (res.ok) {
         let data = await res.blob()
+        console.log(data)
         blobArrayRef.current = [...blobArrayRef.current,data]
         let copyBookMarks = [...bookMarks.current, response.bookmark]
         bookMarks.current = copyBookMarks
@@ -295,13 +297,14 @@ function App() {
     }else{
       formdata.append("isOrignal", "true")
     }
-    let res = await fetch("http://127.0.0.1:5000/handleFinalIndexPDF", {
+    let res = await fetch("http://127.0.0.1:5000/api/add-page-no-in-index", {
       method: 'POST',
       body: formdata
     })
     if (res.ok) {
       console.log("done with index page no")
       const data = await res.blob()
+      console.log(data)
       blobArrayRef.current = [data, ...blobArrayRef.current]
     }
   }
@@ -314,48 +317,59 @@ function App() {
       setCurrStep("work on first pdf (Doc before Annexures)")
       let temp = []
       let i = 0
-      while (i < particulars.current.length && particulars.current[i].toLowerCase().search(/annexure/) === -1) {
+      let j = 0
+      let k = 0
+      while (i < particulars.current.length && j < firstfiles.length && particulars.current[i].toLowerCase().search(/annexure/) === -1) {
         if (particulars.current[i].toLowerCase().search(/court fee/) !== -1) {
           if (temp.length !== 0) {
-            await workonfirstSection(temp,particulars.current.slice(0,i))
+            console.log(temp)
+            await workonfirstSection(temp,particulars.current.slice(k,i))
+            k = i
           }
           await handleFinalFiles(courtFee,particulars.current[i])
           temp = []
+          i++;
         } else {
-          if ( i < firstfiles.length){
-            temp.push(firstfiles[i])
-            if(firstfiles[i].value !== ""){
-              i = parseInt(firstfiles[i].range.split('-')[1]) - 1
+          if ( j < firstfiles.length){
+            temp.push(firstfiles[j])
+            if(firstfiles[j].range !== ""){
+              i = parseInt(firstfiles[j].range.split('-')[1])
             }
+            j++;
           }
         }
-        i++;
       }
       if (temp.length != 0) {
-        await workonfirstSection(temp,particulars.current.slice(0,i))
+        console.log(temp)
+        await workonfirstSection(temp,particulars.current.slice(k,i))
       }
       setCurrStep("wok on Annexures")
       await handleAnnexures()
       setCurrStep("work on Application Vakalatnama and all...")
       i = particulars.current.length - 1;
-      while (i >= 0 && particulars.current[i].toLowerCase().search(/annexure/) === -1) {
+      while (i >= 0 && !particulars.current[i].toLowerCase().startsWith("annexure")) {
         i--;
       }
       i++;
       let applicStartAt = null
-      let j = 0;
+      j = 0;
+
+      console.log(application)
       if (application.length > 0) {
+        console.log("application find out")
         applicStartAt = parseInt(application[0].range.split("-")[0]) - 1;
       }
 
       while (i < particulars.current.length){
+        console.log("start at: ",applicStartAt,"index: ", i)
         if (applicStartAt !== null  && i == applicStartAt){
-          let end = parseInt(application[j].range.split("-")[1]) - 1;
-          await workonfirstSection([application[j]],particulars.current.slice(i,end+1));
-          i = end;
+          let end = parseInt(application[j].range.split("-")[1]);
+          console.log("go for application")
+          await workonfirstSection([application[j]],particulars.current.slice(i,end));
+          i = end - 1;
           j++;
           if (j < application.length){
-            applicStartAt = parseInt(application[j].file.range.split("-")[0]);
+            applicStartAt = parseInt(application[j].range.split("-")[0]);
           } else {
             applicStartAt = null;
           }
@@ -376,12 +390,13 @@ function App() {
       setCurrStep("Insert page number range in Index")
       await addPageNumberInIndex()
       setCurrStep("Preparing Doc for downloading...")
+      console.log(blobArrayRef.current)
       let response = await AddpageNumberService.addPageNoTitle(blobArrayRef.current)
       if (response.success) {
         let formdata = new FormData()
         formdata.append("pdf", new Blob([response.pdf], { type: 'application/pdf' }))
         formdata.append("bookmark", JSON.stringify(bookMarks.current))
-        let res = await fetch("http://127.0.0.1:5000/addBookMarks", {
+        let res = await fetch("http://127.0.0.1:5000/api/add-book-mark", {
           method: 'POST',
           body: formdata
         })
@@ -503,7 +518,7 @@ function App() {
                 placeholder="Index Serial Range (e.g., 1-2) of this doc"
                 value={fileData.file.range}
                 onChange={(e) => handleRangeChange(3, index, e)}
-                className="range-input"
+                className="range-input"  
               />
             </div>
             <div className="delete-btn" onClick={() => handleDelete(index, 3)}>
